@@ -19,7 +19,7 @@ struct MetalViewRepresentable: UIViewRepresentable {
         mtkView.colorPixelFormat = .bgra8Unorm
         
         mtkView.isPaused = true
-        mtkView.enableSetNeedsDisplay = false
+        mtkView.enableSetNeedsDisplay = true
         
         let renderer = MetalGyroRenderer(device: defaultDevice)
         renderer.view = mtkView
