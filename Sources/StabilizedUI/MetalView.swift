@@ -1,13 +1,15 @@
 import SwiftUI
 import MetalKit
 
-struct MetalViewRepresentable: UIViewRepresentable {
+public struct MetalViewRepresentable: UIViewRepresentable {
     
-    func makeCoordinator() -> RendererCoordinator {
+    public init() {}
+    
+    public func makeCoordinator() -> RendererCoordinator {
         RendererCoordinator()
     }
     
-    func makeUIView(context: Context) -> MTKView {
+    public func makeUIView(context: Context) -> MTKView {
         let mtkView = MTKView()
         
         guard let defaultDevice = MTLCreateSystemDefaultDevice() else {
@@ -30,9 +32,9 @@ struct MetalViewRepresentable: UIViewRepresentable {
         return mtkView
     }
     
-    func updateUIView(_ uiView: MTKView, context: Context) {}
+    public func updateUIView(_ uiView: MTKView, context: Context) {}
     
-    class RendererCoordinator {
+    public class RendererCoordinator {
         var renderer: MetalGyroRenderer?
     }
 }

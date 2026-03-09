@@ -6,8 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		9B2619D72F589D59001697F7 /* StabilizedUI in Frameworks */ = {isa = PBXBuildFile; productRef = 9B2619D62F589D59001697F7 /* StabilizedUI */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
-		9ADE59702EF4C2F3006E0F3C /* StabilizedUI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StabilizedUI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9ADE59702EF4C2F3006E0F3C /* StabilizedUIApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StabilizedUIApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -23,6 +27,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9B2619D72F589D59001697F7 /* StabilizedUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -40,7 +45,7 @@
 		9ADE59712EF4C2F3006E0F3C /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				9ADE59702EF4C2F3006E0F3C /* StabilizedUI.app */,
+				9ADE59702EF4C2F3006E0F3C /* StabilizedUIApp.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -48,9 +53,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		9ADE596F2EF4C2F3006E0F3C /* StabilizedUI */ = {
+		9ADE596F2EF4C2F3006E0F3C /* StabilizedUIApp */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 9ADE597B2EF4C2F4006E0F3C /* Build configuration list for PBXNativeTarget "StabilizedUI" */;
+			buildConfigurationList = 9ADE597B2EF4C2F4006E0F3C /* Build configuration list for PBXNativeTarget "StabilizedUIApp" */;
 			buildPhases = (
 				9ADE596C2EF4C2F3006E0F3C /* Sources */,
 				9ADE596D2EF4C2F3006E0F3C /* Frameworks */,
@@ -63,11 +68,12 @@
 			fileSystemSynchronizedGroups = (
 				9ADE59722EF4C2F3006E0F3C /* StabilizedUI */,
 			);
-			name = StabilizedUI;
+			name = StabilizedUIApp;
 			packageProductDependencies = (
+				9B2619D62F589D59001697F7 /* StabilizedUI */,
 			);
 			productName = StabilizedUI;
-			productReference = 9ADE59702EF4C2F3006E0F3C /* StabilizedUI.app */;
+			productReference = 9ADE59702EF4C2F3006E0F3C /* StabilizedUIApp.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -85,7 +91,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 9ADE596B2EF4C2F3006E0F3C /* Build configuration list for PBXProject "StabilizedUI" */;
+			buildConfigurationList = 9ADE596B2EF4C2F3006E0F3C /* Build configuration list for PBXProject "StabilizedUIApp" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -94,12 +100,15 @@
 			);
 			mainGroup = 9ADE59672EF4C2F3006E0F3C;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				9B2619D52F589D59001697F7 /* XCLocalSwiftPackageReference "../../../StabilizedUI" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9ADE59712EF4C2F3006E0F3C /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				9ADE596F2EF4C2F3006E0F3C /* StabilizedUI */,
+				9ADE596F2EF4C2F3006E0F3C /* StabilizedUIApp */,
 			);
 		};
 /* End PBXProject section */
@@ -253,7 +262,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = P3Y8ZZHB4U;
+				DEVELOPMENT_TEAM = D85QWSUNYA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -286,7 +295,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = P3Y8ZZHB4U;
+				DEVELOPMENT_TEAM = D85QWSUNYA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -315,7 +324,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		9ADE596B2EF4C2F3006E0F3C /* Build configuration list for PBXProject "StabilizedUI" */ = {
+		9ADE596B2EF4C2F3006E0F3C /* Build configuration list for PBXProject "StabilizedUIApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9ADE59792EF4C2F4006E0F3C /* Debug */,
@@ -324,7 +333,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		9ADE597B2EF4C2F4006E0F3C /* Build configuration list for PBXNativeTarget "StabilizedUI" */ = {
+		9ADE597B2EF4C2F4006E0F3C /* Build configuration list for PBXNativeTarget "StabilizedUIApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9ADE597C2EF4C2F4006E0F3C /* Debug */,
@@ -334,6 +343,20 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		9B2619D52F589D59001697F7 /* XCLocalSwiftPackageReference "../../../StabilizedUI" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../../StabilizedUI;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		9B2619D62F589D59001697F7 /* StabilizedUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = StabilizedUI;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 9ADE59682EF4C2F3006E0F3C /* Project object */;
 }

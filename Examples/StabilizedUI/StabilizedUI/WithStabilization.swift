@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import StabilizedUI
 
 struct WithStabilization : View {
     var body: some View {
