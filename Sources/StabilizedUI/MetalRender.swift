@@ -1,241 +1,348 @@
 import CoreMotion
 import MetalKit
+import os
 import QuartzCore
 import simd
 
-class MetalGyroRenderer: NSObject, MTKViewDelegate {
 
-    var device: MTLDevice!
-    var commandQueue: MTLCommandQueue!
-    var pipelineState: MTLRenderPipelineState!
-    var vertexBuffer: MTLBuffer!
-    var texture: MTLTexture?
-    weak var view: MTKView?
+final class MetalGyroRenderer: NSObject, MTKViewDelegate {
+
+
+    private let device: MTLDevice
+    private let commandQueue: MTLCommandQueue
+    private let pipelineState: MTLRenderPipelineState
+    private let quadBuffer: MTLBuffer
+
+
+    private static let maxFramesInFlight = 3
+    private let uniformBuffers: [MTLBuffer]
+    private let frameSemaphore = DispatchSemaphore(value: maxFramesInFlight)
+    private var currentBufferIndex = 0
+
+
+    private var texture: MTLTexture?
+    private let textureLock = NSLock()
+
+
     private let motionManager = CMMotionManager()
+    private let maxOffset: Float
+    private let smoothing: Float
+    private let motionRate: Double
 
-    var currentOffset: SIMD2<Float> = .zero
+    private var _targetOffset:  SIMD3<Float> = SIMD3(0, 0, 1)
+    private var currentOffset:  SIMD3<Float> = SIMD3(0, 0, 1)
 
-    //for picture of persyk
-    let scaleX: Float = 0.7
-    let scaleY: Float = 0.32
+    private var referenceQuaternion: CMQuaternion?
 
-    lazy var vertexData: [Float] = [
-        -scaleX, scaleY, 0.0, 1.0, 0.0, 0.0,
-        -scaleX, -scaleY, 0.0, 1.0, 0.0, 1.0,
-        scaleX, scaleY, 0.0, 1.0, 1.0, 0.0,
-        scaleX, -scaleY, 0.0, 1.0, 1.0, 1.0,
-    ]
+    private var lpX: Float = 0
+    private var lpY: Float = 0
 
-    //    //poem picture
-    //    let scaleX: Float = 1.5
-    //    let scaleY: Float = 1.25
-    //    //        let scaleX: Float = 0.7
-    //    //        let scaleY: Float = 0.58
-    //
-    //
-    //    lazy var vertexData: [Float] = [
-    //        -scaleX, scaleY, 0.0, 1.0, 0.0, 0.0,
-    //        -scaleX, -scaleY, 0.0, 1.0, 0.0, 1.0,
-    //        scaleX, scaleY, 0.0, 1.0, 1.0, 0.0,
-    //        scaleX, -scaleY, 0.0, 1.0, 1.0, 1.0,
-    //    ]
+    private var offsetLock = os_unfair_lock()
 
-    init(device: MTLDevice) {
-        self.device = device
-        self.commandQueue = device.makeCommandQueue()
-        super.init()
-        setupPipeline()
-        setupVertexBuffers()
-        loadTexture(imageName: "persyk")
-        startMotionTracking()
-    }
+    private var hasNewMotionData = false
 
-    func setupPipeline() {
-        guard let library = device.makeDefaultLibrary() else { return }
-        let vertexFunction = library.makeFunction(name: "vertex_main")
-        let fragmentFunction = library.makeFunction(name: "fragment_main")
-        let descriptor = MTLRenderPipelineDescriptor()
-        descriptor.vertexFunction = vertexFunction
-        descriptor.fragmentFunction = fragmentFunction
-        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
-        let vertexDescriptor = MTLVertexDescriptor()
-        vertexDescriptor.attributes[0].format = .float4
-        vertexDescriptor.attributes[0].offset = 0
-        vertexDescriptor.attributes[0].bufferIndex = 0
-        vertexDescriptor.attributes[1].format = .float2
-        vertexDescriptor.attributes[1].offset = 16
-        vertexDescriptor.attributes[1].bufferIndex = 0
-        vertexDescriptor.layouts[0].stride = 24
-        descriptor.vertexDescriptor = vertexDescriptor
-        pipelineState = try? device.makeRenderPipelineState(
-            descriptor: descriptor
-        )
-    }
-
-    func setupVertexBuffers() {
-        vertexBuffer = device.makeBuffer(
-            bytes: vertexData,
-            length: vertexData.count * MemoryLayout<Float>.size,
-            options: []
-        )
-    }
-
-    func loadTexture(imageName: String) {
-        let loader = MTKTextureLoader(device: device)
-        texture = try? loader.newTexture(
-            name: imageName,
-            scaleFactor: 1.0,
-            bundle: nil,
-            options: [.SRGB: false]
-        )
-    }
-
-    private let maxOffset: Float = 0.12
-    private let smoothing: Float = 0.5
-
-    //    var offset: CGSize = .zero
-
-    private var initialRoll: Float?
-    private var initialPitch: Float?
-    private var initialQuaternion: CMQuaternion?
-
-    //    func startMotionTracking() {
-    //                guard motionManager.isDeviceMotionAvailable else { return }
-    //                motionManager.deviceMotionUpdateInterval = 1 / 200
-    //
-    //                motionManager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: .main) { [weak self] motion, _ in
-    //                    guard let self = self, let m = motion else { return }
-    //
-    //                    let currentQ = m.attitude.quaternion
-    //
-    //                    if self.initialQuaternion == nil {
-    //                        self.initialQuaternion = currentQ
-    //                    }
-    //
-    //                    guard let initialQ = self.initialQuaternion else { return }
-    //
-    //
-    //                    let inversionQ = CMQuaternion(x: -initialQ.x, y: -initialQ.y, z: -initialQ.z, w: initialQ.w)
-    //                    let targetG = multiplyQuaternions(currentQ, inversionQ)
-    //
-    //                    // 3. Компоненти x та y відносного кватерніона прямо пропорційні нахилу
-    //                    // Множимо на 2.0, бо значення компонентів кватерніона зазвичай вдвічі менші за кути в радіанах
-    //                    let targetX = -clamp(Float(targetG.y) * 2.0, -self.maxOffset, self.maxOffset)
-    //                    let targetY = clamp(Float(targetG.x) * 2.0, -self.maxOffset, self.maxOffset)
-    //
-    //
-    //                    let newX = currentOffset.x + (targetX - currentOffset.x) * self.smoothing
-    //                    let newY = currentOffset.y + (targetY - currentOffset.y) * self.smoothing
-    //
-    //                    self.currentOffset = SIMD2<Float>(newX, newY)
-    //                    self.view?.setNeedsDisplay()
-    //                }
-    //            }
-    //
-    //            private func multiplyQuaternions(_ q1: CMQuaternion, _ q2: CMQuaternion) -> CMQuaternion {
-    //                return CMQuaternion(
-    //                    x: q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y,
-    //                    y: q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x,
-    //                    z: q1.w * q2.z + q1.x * q2.y - q1.y * q2.x + q1.z * q2.w,
-    //                    w: q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z
-    //                )
-    //            }
-    //
-
-    func startMotionTracking() {
-        guard motionManager.isDeviceMotionAvailable else { return }
-        motionManager.deviceMotionUpdateInterval = 1 / 200
-
-        motionManager.startDeviceMotionUpdates(
-            using: .xArbitraryZVertical,
-            to: .main
-        ) {
-            [weak self] motion, _ in
-            guard let self, let m = motion else { return }
-
-            let roll = Float(m.attitude.roll)
-            let pitch = Float(m.attitude.pitch)
-
-            if self.initialRoll == nil {
-                self.initialRoll = roll
-                self.initialPitch = pitch
-            }
-
-            let deltaX = roll - (self.initialRoll ?? 0.0)
-            let deltaY = pitch - (self.initialPitch ?? 0.0)
-
-            let targetX = -clamp(
-                deltaX * 0.2,
-                -self.maxOffset,
-                self.maxOffset
-            )
-            let targetY = clamp(
-                deltaY * 0.2,
-                -self.maxOffset,
-                self.maxOffset
-            )
-
-            let newX =
-                currentOffset.x + (targetX - currentOffset.x) * self.smoothing
-            let newY =
-                currentOffset.y + (targetY - currentOffset.y) * self.smoothing
-
-            currentOffset = SIMD2<Float>(newX, newY)
-
-            self.view?.setNeedsDisplay()
+    private var targetOffset: SIMD3<Float> {
+        get {
+            os_unfair_lock_lock(&offsetLock)
+            defer { os_unfair_lock_unlock(&offsetLock) }
+            return _targetOffset
+        }
+        set {
+            os_unfair_lock_lock(&offsetLock)
+            _targetOffset = newValue
+            os_unfair_lock_unlock(&offsetLock)
         }
     }
 
-    func stop() {
+
+    private var displayLink: CADisplayLink?
+    private weak var mtkView: MTKView?
+
+    var quadScale: SIMD2<Float> = .one
+
+
+    init(
+        device: MTLDevice,
+        mtkView: MTKView,
+        maxOffset: Float,
+        smoothing: Float,
+        motionRate: Double
+    ) {
+        self.device       = device
+        self.mtkView      = mtkView
+        self.maxOffset    = maxOffset
+        self.smoothing    = smoothing
+        self.motionRate   = motionRate
+        self.commandQueue = device.makeCommandQueue()!
+
+        let library: MTLLibrary
+        if let lib = try? device.makeDefaultLibrary(bundle: Bundle.module) {
+            library = lib
+        } else if let lib = device.makeDefaultLibrary() {
+            library = lib
+        } else {
+            fatalError("[MetalGyroRenderer] Cannot find Metal library. Переконайтесь що Shaders.metal є в target/package.")
+        }
+
+        let pd = MTLRenderPipelineDescriptor()
+        pd.label            = "MetalGyro"
+        pd.vertexFunction   = library.makeFunction(name: "vertex_main")
+        pd.fragmentFunction = library.makeFunction(name: "fragment_main")
+        pd.colorAttachments[0].pixelFormat = .bgra8Unorm
+
+        let vd = MTLVertexDescriptor()
+        vd.attributes[0].format = .float4; vd.attributes[0].offset = 0;  vd.attributes[0].bufferIndex = 0
+        vd.attributes[1].format = .float2; vd.attributes[1].offset = 16; vd.attributes[1].bufferIndex = 0
+        vd.layouts[0].stride = 24
+        pd.vertexDescriptor  = vd
+
+        self.pipelineState = try! device.makeRenderPipelineState(descriptor: pd)
+
+        let quad: [Float] = [
+            -1,  1, 0, 1,  0, 0,
+            -1, -1, 0, 1,  0, 1,
+             1,  1, 0, 1,  1, 0,
+             1, -1, 0, 1,  1, 1,
+        ]
+        self.quadBuffer = device.makeBuffer(
+            bytes: quad,
+            length: quad.count * MemoryLayout<Float>.stride,
+            options: .storageModeShared
+        )!
+
+        self.uniformBuffers = (0..<MetalGyroRenderer.maxFramesInFlight).map { i in
+            let b = device.makeBuffer(
+                length: MemoryLayout<SIMD4<Float>>.stride,
+                options: .storageModeShared
+            )!
+            b.label = "Uniforms[\(i)]"
+            return b
+        }
+
+        super.init()
+        startMotionTracking()
+    }
+
+    func uploadTexture(cgImage: CGImage) {
+        let width  = cgImage.width
+        let height = cgImage.height
+        guard width > 0, height > 0 else { return }
+
+        let alignment   = 64
+        let rawBPR      = width * 4
+        let bytesPerRow = (rawBPR + alignment - 1) / alignment * alignment
+
+        guard let mtlBuf = device.makeBuffer(
+            length: height * bytesPerRow,
+            options: .storageModeShared
+        ) else {
+            print("[MetalGyroRenderer] makeBuffer failed")
+            return
+        }
+
+        guard let ctx = CGContext(
+            data: mtlBuf.contents(),
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue
+                      | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else {
+            print("[MetalGyroRenderer] CGContext init failed")
+            return
+        }
+
+        ctx.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
+        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        ctx.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        let td = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        td.usage       = .shaderRead
+        td.storageMode = .shared
+
+        guard let tex = mtlBuf.makeTexture(
+            descriptor: td,
+            offset: 0,
+            bytesPerRow: bytesPerRow
+        ) else {
+            print("[MetalGyroRenderer] makeTexture from buffer failed")
+            return
+        }
+        tex.label = "ContentTexture"
+
+        textureLock.lock()
+        texture = tex
+        textureLock.unlock()
+        print("[MetalGyroRenderer] texture ready \(width)x\(height)")
+    }
+
+
+    private func startMotionTracking() {
+        guard motionManager.isDeviceMotionAvailable else { return }
+        motionManager.deviceMotionUpdateInterval = 1.0 / motionRate
+
+        let q = OperationQueue()
+        q.maxConcurrentOperationCount = 1
+        q.qualityOfService = .userInteractive
+
+        motionManager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: q) {
+            [weak self] motion, _ in
+            guard let self, let m = motion else { return }
+
+            let currentQ = m.attitude.quaternion
+
+            if self.referenceQuaternion == nil {
+                self.referenceQuaternion = currentQ
+            }
+            guard var refQ = self.referenceQuaternion else { return }
+
+            let invRef = CMQuaternion(x: -refQ.x, y: -refQ.y,
+                                      z: -refQ.z, w:  refQ.w)
+            let rel = Self.multiplyQ(invRef, currentQ)
+
+            let rawX = -Float(rel.y) * 2.0
+            let rawY =  Float(rel.x) * 2.0
+
+            let alpha: Float = 0.4
+            self.lpX += (rawX - self.lpX) * alpha
+            self.lpY += (rawY - self.lpY) * alpha
+
+            let stabilizedX = self.lpX
+            let stabilizedY = self.lpY
+
+            let magnitude = sqrt(rawX*rawX + rawY*rawY)
+            let baseDrift: Float = 0.0002
+            let edgeBoost: Float = 0.005
+            let driftSpeed = baseDrift + edgeBoost * (magnitude / self.maxOffset)
+                                                   * (magnitude / self.maxOffset)
+            refQ = Self.slerpQ(refQ, currentQ, tx: driftSpeed, ty: driftSpeed)
+            self.referenceQuaternion = refQ
+
+            let tx = min(max(stabilizedX, -self.maxOffset), self.maxOffset)
+            let ty = min(max(stabilizedY, -self.maxOffset), self.maxOffset)
+
+            let az = -Float(m.userAcceleration.z)
+            let currentScale = self.targetOffset.z
+            let newScale = min(max(currentScale + az * 0.02, 0.85), 1.15)
+            let decayedScale = newScale + (1.0 - newScale) * 0.02
+
+            self.targetOffset = SIMD3(tx, ty, decayedScale)
+            self.hasNewMotionData = true
+        }
+    }
+
+
+
+    private static func multiplyQ(_ q1: CMQuaternion, _ q2: CMQuaternion) -> CMQuaternion {
+        CMQuaternion(
+            x: q1.w*q2.x + q1.x*q2.w + q1.y*q2.z - q1.z*q2.y,
+            y: q1.w*q2.y - q1.x*q2.z + q1.y*q2.w + q1.z*q2.x,
+            z: q1.w*q2.z + q1.x*q2.y - q1.y*q2.x + q1.z*q2.w,
+            w: q1.w*q2.w - q1.x*q2.x - q1.y*q2.y - q1.z*q2.z
+        )
+    }
+
+    private static func slerpQ(_ q1: CMQuaternion, _ q2: CMQuaternion,
+                                tx: Float, ty: Float) -> CMQuaternion {
+        let t = Double(max(tx, ty))
+        var dot = q1.x*q2.x + q1.y*q2.y + q1.z*q2.z + q1.w*q2.w
+        var q2 = q2
+        if dot < 0 { q2 = CMQuaternion(x:-q2.x,y:-q2.y,z:-q2.z,w:-q2.w); dot = -dot }
+        if dot > 0.9995 {
+            return CMQuaternion(x: q1.x + t*(q2.x-q1.x), y: q1.y + t*(q2.y-q1.y),
+                                z: q1.z + t*(q2.z-q1.z), w: q1.w + t*(q2.w-q1.w))
+        }
+        let theta0 = acos(dot)
+        let theta  = theta0 * t
+        let s1 = cos(theta) - dot * sin(theta) / sin(theta0)
+        let s2 = sin(theta) / sin(theta0)
+        return CMQuaternion(x: s1*q1.x+s2*q2.x, y: s1*q1.y+s2*q2.y,
+                            z: s1*q1.z+s2*q2.z, w: s1*q1.w+s2*q2.w)
+    }
+
+
+    func startDisplayLink() {
+        let dl = CADisplayLink(target: self, selector: #selector(tick))
+        dl.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        dl.add(to: .main, forMode: .common)
+        displayLink = dl
+    }
+
+    @objc private func tick() {
+        guard hasNewMotionData else { return }
+        hasNewMotionData = false
+
+        let target = targetOffset
+
+        let deadZone: Float = 0.0005
+        let dx = target.x - currentOffset.x
+        let dy = target.y - currentOffset.y
+        let dz = target.z - currentOffset.z
+        guard abs(dx) > deadZone || abs(dy) > deadZone || abs(dz) > deadZone else { return }
+
+        let xySmoothing: Float = smoothing
+        let zSmoothing:  Float = smoothing * 0.4
+
+        currentOffset.x += dx * xySmoothing
+        currentOffset.y += dy * xySmoothing
+        currentOffset.z += dz * zSmoothing
+        mtkView?.draw()
+    }
+
+    func tearDown() {
+        displayLink?.invalidate()
+        displayLink = nil
         motionManager.stopDeviceMotionUpdates()
     }
 
-    private func clamp(_ v: Float, _ lo: Float, _ hi: Float) -> Float {
-        min(max(v, lo), hi)
-    }
-
-    var lastTimestamp: TimeInterval = 0.0
-    var velocity = SIMD2<Float>(0, 0)
-    var position = SIMD2<Float>(0, 0)
-
-    func updateMotion(data: CMDeviceMotion) {
-
-    }
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     func draw(in view: MTKView) {
-        guard let drawable = view.currentDrawable,
-            let descriptor = view.currentRenderPassDescriptor,
-            let pipelineState = pipelineState, let texture = texture
-        else { return }
+        frameSemaphore.wait()
 
-        descriptor.colorAttachments[0].clearColor = MTLClearColor(
-            red: 0,
-            green: 0,
-            blue: 0,
-            alpha: 1
-        )
+        guard
+            let drawable   = view.currentDrawable,
+            let descriptor = view.currentRenderPassDescriptor
+        else { frameSemaphore.signal(); return }
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeRenderCommandEncoder(
-            descriptor: descriptor
-        )!
-        encoder.setRenderPipelineState(pipelineState)
-        encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
-        encoder.setVertexBytes(
-            &currentOffset,
-            length: MemoryLayout<SIMD2<Float>>.stride,
-            index: 1
-        )
-        encoder.setFragmentTexture(texture, index: 0)
-        encoder.drawPrimitives(
-            type: .triangleStrip,
-            vertexStart: 0,
-            vertexCount: 4
-        )
-        encoder.endEncoding()
-        commandBuffer.present(drawable)
-        commandBuffer.commit()
+        textureLock.lock()
+        let tex = texture
+        textureLock.unlock()
+
+        guard let tex else { frameSemaphore.signal(); return }
+
+        currentBufferIndex = (currentBufferIndex + 1) % MetalGyroRenderer.maxFramesInFlight
+        let ubuf = uniformBuffers[currentBufferIndex]
+        let sx = quadScale.x * currentOffset.z
+        let sy = quadScale.y * currentOffset.z
+        ubuf.contents()
+            .bindMemory(to: SIMD4<Float>.self, capacity: 1)
+            .pointee = SIMD4(currentOffset.x, currentOffset.y, sx, sy)
+
+        guard let cb = commandQueue.makeCommandBuffer() else {
+            frameSemaphore.signal(); return
+        }
+        cb.addCompletedHandler { [weak self] _ in self?.frameSemaphore.signal() }
+
+        guard let enc = cb.makeRenderCommandEncoder(descriptor: descriptor) else {
+            frameSemaphore.signal(); return
+        }
+        enc.setRenderPipelineState(pipelineState)
+        enc.setVertexBuffer(quadBuffer, offset: 0, index: 0)
+        enc.setVertexBuffer(ubuf,       offset: 0, index: 1)
+        enc.setFragmentTexture(tex, index: 0)
+        enc.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        enc.endEncoding()
+
+        cb.present(drawable)
+        cb.commit()
     }
 }

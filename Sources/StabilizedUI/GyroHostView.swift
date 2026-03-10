@@ -72,8 +72,6 @@ public final class GyroHostView: UIView {
             return
         }
 
-        // ImageRenderer МУСИТЬ викликатись на main thread (вимога SwiftUI).
-        // cgImage є immutable — його можна передати на background для upload.
         let ir = ImageRenderer(content: provider(size))
         ir.proposedSize = .init(size)
         ir.scale = traitCollection.displayScale > 0 ? traitCollection.displayScale : 3
@@ -83,8 +81,6 @@ public final class GyroHostView: UIView {
             return
         }
         print("[MetalGyroView] cgImage ok: \(cgImage.width)x\(cgImage.height)")
-        // uploadTexture робить CGContext.draw — важка операція, на background.
-        // CGImage immutable і thread-safe для читання.
         let r = renderer
         DispatchQueue.global(qos: .userInitiated).async {
             r.uploadTexture(cgImage: cgImage)
@@ -93,3 +89,9 @@ public final class GyroHostView: UIView {
 
     func tearDown() { renderer.tearDown() }
 }
+
+
+
+
+
+

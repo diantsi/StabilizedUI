@@ -10,9 +10,14 @@ import StabilizedUI
 
 struct WithStabilization : View {
     var body: some View {
-        MetalViewRepresentable()
-            .edgesIgnoringSafeArea(.all)
-            .background(Color.black)
-        
+        MetalGyroView {
+            VStack(spacing: 50) {
+                Text("Текст 1")
+                    .font(.title).foregroundColor(.white)
+                Text("Текст 2")
+                    .font(.title).foregroundColor(.white)
+                
+            }
+        }
     }
 }

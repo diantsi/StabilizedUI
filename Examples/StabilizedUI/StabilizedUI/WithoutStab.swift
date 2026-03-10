@@ -7,15 +7,15 @@
 
 import SwiftUI
 
-struct WithoutStabilization : View {
-    var body: some View {            
-            Image("persyk")
-                .resizable()
-                .scaledToFit()
-//                .frame(width: 594, height: 1067)
-                .frame(width: 300, height: 300)
-                .padding(60)
-            
-        
+struct WithoutStabilization: View {
+    var body: some View {
+        VStack(spacing: 50) {
+            Text("Текст 1")
+                .font(.title).foregroundColor(.white)
+            Text("Текст 2")
+                .font(.title).foregroundColor(.white)
+
+        }
+
     }
 }
