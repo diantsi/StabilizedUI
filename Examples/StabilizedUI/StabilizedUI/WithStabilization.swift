@@ -10,7 +10,10 @@ import StabilizedUI
 
 struct WithStabilization : View {
     var body: some View {
-        MetalGyroView {
+        MetalGyroView(
+            maxOffset: 0.2,     // Larger range for vehicle movements
+            smoothing: 0.0      // Zero smoothing for instant response
+        ) {
             VStack(spacing: 50) {
                 Text("Текст 1")
                     .font(.title).foregroundColor(.white)

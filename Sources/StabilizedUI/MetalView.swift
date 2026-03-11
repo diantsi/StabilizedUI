@@ -15,9 +15,9 @@ public struct MetalGyroView<Content: View>: UIViewRepresentable {
     private let content: () -> Content
 
     public init(
-        maxOffset: Float = 0.04,
+        maxOffset: Float = 0.1,
         smoothing: Float = 0.4,
-        motionRate: Double = 200,
+        motionRate: Double = 20_000,
         scale: SIMD2<Float> = .one,
         @ViewBuilder content: @escaping () -> Content
     ) {

@@ -186,13 +186,18 @@ final class MetalGyroRenderer: NSObject, MTKViewDelegate {
 
     private func startMotionTracking() {
         guard motionManager.isDeviceMotionAvailable else { return }
-        motionManager.deviceMotionUpdateInterval = 1.0 / motionRate
+        // Balanced update rate: 60Hz (good balance of responsiveness and stability)
+        motionManager.deviceMotionUpdateInterval = 1.0 / 60.0
+        motionManager.showsDeviceMovementDisplay = false
 
         let q = OperationQueue()
         q.maxConcurrentOperationCount = 1
         q.qualityOfService = .userInteractive
 
-        motionManager.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: q) {
+        // Try .xTrueNorthZVertical for better stability, fallback to .xArbitraryZVertical
+        let referenceFrame: CMAttitudeReferenceFrame = .xArbitraryZVertical
+        
+        motionManager.startDeviceMotionUpdates(using: referenceFrame, to: q) {
             [weak self] motion, _ in
             guard let self, let m = motion else { return }
 
@@ -210,13 +215,23 @@ final class MetalGyroRenderer: NSObject, MTKViewDelegate {
             let rawX = -Float(rel.y) * 2.0
             let rawY =  Float(rel.x) * 2.0
 
-            let alpha: Float = 0.4
-            self.lpX += (rawX - self.lpX) * alpha
-            self.lpY += (rawY - self.lpY) * alpha
+            // Apply low-pass filter only if smoothing is enabled
+            let stabilizedX: Float
+            let stabilizedY: Float
+            
+            if self.smoothing > 0 {
+                let alpha: Float = 0.4
+                self.lpX += (rawX - self.lpX) * alpha
+                self.lpY += (rawY - self.lpY) * alpha
+                stabilizedX = self.lpX
+                stabilizedY = self.lpY
+            } else {
+                // Zero smoothing = instant response, no filtering
+                stabilizedX = rawX
+                stabilizedY = rawY
+            }
 
-            let stabilizedX = self.lpX
-            let stabilizedY = self.lpY
-
+            // Restore drift compensation - essential for stable reference frame
             let magnitude = sqrt(rawX*rawX + rawY*rawY)
             let baseDrift: Float = 0.0002
             let edgeBoost: Float = 0.005
@@ -228,12 +243,15 @@ final class MetalGyroRenderer: NSObject, MTKViewDelegate {
             let tx = min(max(stabilizedX, -self.maxOffset), self.maxOffset)
             let ty = min(max(stabilizedY, -self.maxOffset), self.maxOffset)
 
-            let az = -Float(m.userAcceleration.z)
-            let currentScale = self.targetOffset.z
-            let newScale = min(max(currentScale + az * 0.02, 0.85), 1.15)
-            let decayedScale = newScale + (1.0 - newScale) * 0.02
+            // For vehicle vibration: disable Z-axis scaling (keeps it at 1.0 for stability)
+            let targetScale: Float = self.smoothing > 0 ? {
+                let az = -Float(m.userAcceleration.z)
+                let currentScale = self.targetOffset.z
+                let newScale = min(max(currentScale + az * 0.02, 0.85), 1.15)
+                return newScale + (1.0 - newScale) * 0.02
+            }() : 1.0
 
-            self.targetOffset = SIMD3(tx, ty, decayedScale)
+            self.targetOffset = SIMD3(-tx, -ty, targetScale)
             self.hasNewMotionData = true
         }
     }
@@ -270,29 +288,38 @@ final class MetalGyroRenderer: NSObject, MTKViewDelegate {
 
     func startDisplayLink() {
         let dl = CADisplayLink(target: self, selector: #selector(tick))
-        dl.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 120)
+        // Match motion sensor rate for stability
+        dl.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 120, preferred: 60)
         dl.add(to: .main, forMode: .common)
         displayLink = dl
     }
 
     @objc private func tick() {
+        // Always render if we have new motion data for instant response
         guard hasNewMotionData else { return }
         hasNewMotionData = false
 
         let target = targetOffset
 
-        let deadZone: Float = 0.0005
-        let dx = target.x - currentOffset.x
-        let dy = target.y - currentOffset.y
-        let dz = target.z - currentOffset.z
-        guard abs(dx) > deadZone || abs(dy) > deadZone || abs(dz) > deadZone else { return }
+        // For vehicle vibration cancellation: use smoothing if provided, else instant update
+        if smoothing > 0 {
+            let deadZone: Float = 0.0005
+            let dx = target.x - currentOffset.x
+            let dy = target.y - currentOffset.y
+            let dz = target.z - currentOffset.z
+            guard abs(dx) > deadZone || abs(dy) > deadZone || abs(dz) > deadZone else { return }
 
-        let xySmoothing: Float = smoothing
-        let zSmoothing:  Float = smoothing * 0.4
+            let xySmoothing: Float = smoothing
+            let zSmoothing:  Float = smoothing * 0.4
 
-        currentOffset.x += dx * xySmoothing
-        currentOffset.y += dy * xySmoothing
-        currentOffset.z += dz * zSmoothing
+            currentOffset.x += dx * xySmoothing
+            currentOffset.y += dy * xySmoothing
+            currentOffset.z += dz * zSmoothing
+        } else {
+            // Zero smoothing = instant response, no interpolation or dead zone
+            currentOffset = target
+        }
+        
         mtkView?.draw()
     }
 
